@@ -3,7 +3,7 @@
 </style></head><body><div id="wrap"><canvas id="game" width="540" height="960"></canvas><div id="start" class="overlay"><div class="card"><div class="logo">SASAO<br>RIVER RUN<em>軽トラで川まで行け。</em></div><div class="sub">運転手を交代しながら、荷台の5人を一人も落とさずササオ川へ。<br>アクセルは押しっぱなし。画面を左右にドラッグして車体を傾ける。</div><button id="startButton">川へ向かう</button></div></div><div id="ending" class="overlay hidden"><div class="card"><div id="endingTitle" class="logo">到着</div><p id="endingText" class="sub"></p><button id="restartButton">もう一度走る</button></div></div><div id="rotate">iPhoneを縦向きにしてください</div></div>
 <script>
 'use strict';
-const G={W:540,H:960,c:null,x:null,last:0,t:0,state:'TITLE',dist:0,goal:5200,speed:0,hp:100,driver:0,shake:0,flash:0,tilt:0,targetTilt:0,skill:0,skillCD:[0,0,0,0,0,0],driverSwapCD:0,particles:[],dust:[],rocks:[],road:[],stars:[],inputX:270,drag:false,camY:0,warning:'',warnT:0,bgm:null};
+const G={W:540,H:960,c:null,x:null,last:0,t:0,state:'TITLE',dist:0,goal:5200,speed:0,hp:100,driver:0,shake:0,flash:0,tilt:0,targetTilt:0,skill:0,skillCD:[0,0,0,0,0,0],driverSwapCD:0,startGrace:0,particles:[],dust:[],rocks:[],road:[],stars:[],inputX:270,drag:false,camY:0,warning:'',warnT:0,bgm:null};
 const chars=[
  {name:'トシユキ',short:'トシ',hair:'#15171d',skin:'#d8ae84',shirt:'#5f556d',skill:'ザ・ワールド',desc:'障害物を3秒止める'},
  {name:'イサジ',short:'イサジ',hair:'#d5b641',skin:'#c79065',shirt:'#111217',skill:'鬼ドライブ',desc:'加速＋衝撃無効'},
@@ -15,13 +15,13 @@ const chars=[
 const riders=[];
 function rr(a,b){return a+Math.random()*(b-a)} function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
 function terrain(x){return 680 + Math.sin(x*.0045)*26 + Math.sin(x*.012)*13 + (x>880&&x<1100? -58*Math.sin((x-880)/220*Math.PI):0)+(x>1750&&x<2010?55*Math.sin((x-1750)/260*Math.PI):0)+(x>3150&&x<3430?-82*Math.sin((x-3150)/280*Math.PI):0)+(x>4200&&x<4490?68*Math.sin((x-4200)/290*Math.PI):0)}
-function reset(){G.t=0;G.dist=0;G.speed=110;G.hp=100;G.driver=0;G.shake=0;G.flash=0;G.tilt=0;G.targetTilt=0;G.skill=0;G.skillCD=[0,0,0,0,0,0];G.driverSwapCD=0;G.rocks=[];G.particles=[];G.dust=[];G.warning='';G.warnT=0;riders.length=0;for(let i=0;i<5;i++)riders.push({slot:i,x:0,y:0,vx:0,vy:0,rot:0,vr:0,air:0,fallen:false,bounce:0});G.state='PLAY';}
+function reset(){G.t=0;G.dist=0;G.speed=110;G.hp=100;G.driver=0;G.shake=0;G.flash=0;G.tilt=0;G.targetTilt=0;G.skill=0;G.skillCD=[0,0,0,0,0,0];G.driverSwapCD=0;G.startGrace=2.0;G.rocks=[];G.particles=[];G.dust=[];G.warning='';G.warnT=0;riders.length=0;for(let i=0;i<5;i++){const targetX=(i-2)*48;const targetY=-3-Math.abs(i-2)*2;riders.push({slot:i,x:targetX,y:targetY,vx:0,vy:0,rot:0,vr:0,air:0,fallen:false,bounce:0})}G.state='PLAY';}
 function initWorld(){for(let i=0;i<80;i++)G.stars.push({x:rr(0,540),y:rr(0,520),a:rr(.15,.8),s:rr(.4,1.6)});}
 function sfx(type){try{if(!G.ac)G.ac=new(window.AudioContext||window.webkitAudioContext)();const o=G.ac.createOscillator(),g=G.ac.createGain();o.connect(g);g.connect(G.ac.destination);const n=G.ac.currentTime;if(type==='hit'){o.type='square';o.frequency.setValueAtTime(110,n);o.frequency.exponentialRampToValueAtTime(42,n+.18);g.gain.setValueAtTime(.11,n);g.gain.exponentialRampToValueAtTime(.001,n+.2)}else if(type==='skill'){o.type='sawtooth';o.frequency.setValueAtTime(180,n);o.frequency.exponentialRampToValueAtTime(720,n+.28);g.gain.setValueAtTime(.08,n);g.gain.exponentialRampToValueAtTime(.001,n+.3)}else{o.frequency.value=420;g.gain.setValueAtTime(.035,n);g.gain.exponentialRampToValueAtTime(.001,n+.06)}o.start(n);o.stop(n+.32)}catch(e){}}
 function useSkill(){if(G.state!=='PLAY'||G.skillCD[G.driver]>0)return;sfx('skill');G.skillCD[G.driver]=12;G.skill=3.2;const d=G.driver;if(d===2)G.hp=Math.min(100,G.hp+32);if(d===3)for(const r of riders){r.vx*=.15;r.vy*=.1;r.vr*=.1;r.x=0;r.y=0}if(d===5){for(const r of riders)r.vy=-180;G.camY=-18}for(let i=0;i<60;i++)G.particles.push({x:270,y:650,vx:rr(-170,170),vy:rr(-260,20),l:rr(.25,.8),m:rr(1,4)});}
 function switchDriver(i){if(G.driverSwapCD>0||i===G.driver||G.state!=='PLAY')return;const old=G.driver;G.driver=i;G.driverSwapCD=.8;sfx('tap');for(const r of riders){r.vx+=rr(-20,20);r.vy-=18}G.warning=chars[old].short+' → '+chars[i].short;G.warnT=1.1;}
 function spawnRock(){const x=G.dist+rr(550,900);G.rocks.push({x,y:terrain(x)-rr(80,180),r:rr(14,27),vy:rr(40,90),hit:false});}
-function update(dt){if(G.state!=='PLAY')return;G.t+=dt;G.skill=Math.max(0,G.skill-dt);G.driverSwapCD=Math.max(0,G.driverSwapCD-dt);G.warnT=Math.max(0,G.warnT-dt);G.shake=Math.max(0,G.shake-dt*15);G.flash=Math.max(0,G.flash-dt*4);for(let i=0;i<6;i++)G.skillCD[i]=Math.max(0,G.skillCD[i]-dt);
+function update(dt){if(G.state!=='PLAY')return;G.t+=dt;G.skill=Math.max(0,G.skill-dt);G.driverSwapCD=Math.max(0,G.driverSwapCD-dt);G.startGrace=Math.max(0,G.startGrace-dt);G.warnT=Math.max(0,G.warnT-dt);G.shake=Math.max(0,G.shake-dt*15);G.flash=Math.max(0,G.flash-dt*4);for(let i=0;i<6;i++)G.skillCD[i]=Math.max(0,G.skillCD[i]-dt);
  let target=180;if(G.driver===1&&G.skill>0)target=285;if(G.driver===4&&G.skill>0)target=92;G.speed+=(target-G.speed)*dt*1.1;G.speed-=Math.abs(G.tilt)*20*dt;G.speed=clamp(G.speed,65,310);G.dist+=G.speed*dt;
  const roadY=terrain(G.dist), roadAhead=terrain(G.dist+85), slope=clamp((roadAhead-roadY)/90,-.9,.9);G.targetTilt=clamp(G.targetTilt,-1,1);G.tilt+=(G.targetTilt+slope*.9-G.tilt)*dt*4.5;
  const bump=Math.abs(terrain(G.dist+20)-terrain(G.dist-20));if(bump>24&&Math.random()<dt*5){for(const r of riders){r.vy-=rr(45,110);r.vx+=rr(-18,18)}G.shake=Math.max(G.shake,4)}
@@ -30,7 +30,7 @@ function update(dt){if(G.state!=='PLAY')return;G.t+=dt;G.skill=Math.max(0,G.skil
  G.rocks=G.rocks.filter(r=>r.x>G.dist-300);
  const abilityStabilize=(G.driver===3&&G.skill>0);const baseShock=Math.abs(slope)*G.speed*.18;
  riders.forEach((r,i)=>{const targetX=(i-2)*48;const targetY=-3-Math.abs(i-2)*2;r.vy+=430*dt;r.vx+=(-r.x+targetX)*dt*3.1;r.vx*=Math.pow(.2,dt);r.x+=r.vx*dt;r.y+=r.vy*dt;r.rot+=r.vr*dt;r.vr*=Math.pow(.25,dt);if(r.y>targetY){const impact=r.vy;r.y=targetY;r.vy*=-.24;r.vr+=r.vx*.004;if(impact>170&&!abilityStabilize){r.vx+=rr(-35,35)+G.tilt*55;r.vy-=impact*.18}}if(abilityStabilize){r.x+=(targetX-r.x)*dt*8;r.y+=(targetY-r.y)*dt*8;r.rot*=Math.pow(.01,dt)}else{r.vx+=G.tilt*baseShock*dt*.14;r.rot+=(G.tilt*.24-r.rot)*dt*2.2}
-  if(Math.abs(r.x-targetX)>84||r.y>95){r.fallen=true}
+  if(G.startGrace<=0&&(Math.abs(r.x-targetX)>112||r.y>105)){r.fallen=true}
  });
  if(riders.some(r=>r.fallen)){G.state='LOSE';end(false,'荷台から仲間が落ちた。\nササオ川まで '+Math.floor(G.goal-G.dist)+'m。');return}
  if(G.hp<=0){G.state='LOSE';end(false,'軽トラが限界を迎えた。\nササオ川まで '+Math.floor(G.goal-G.dist)+'m。');return}
